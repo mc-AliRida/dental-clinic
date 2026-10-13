@@ -1,0 +1,689 @@
+openapi: 3.0.3
+info:
+  title: Dental Clinic API
+  description: |
+    REST API for a single-dentist clinic (v1). Manages patients, appointments and health reports.
+    PDF email delivery (FR10) is v2 and not included.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Auth
+  - name: Patients
+  - name: Appointments
+  - name: Health Reports
+
+# Every endpoint needs a valid JWT unless it sets security to an empty list (NFR3d)
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in (FR1)
+      description: Returns a JWT that expires 8 hours after login (NFR3c). A wrong email or password returns a generic message that does not say which one was wrong.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Wrong email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: 401
+                message: Wrong email or password
+
+  /patients:
+    get:
+      tags: [Patients]
+      summary: Search patients (FR4)
+      description: Lists every patient whose first name, last name or phone number contains the search term. Returns an empty list when nothing matches, and the UI shows "No patients found".
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search term, at least 2 characters
+          schema:
+            type: string
+            minLength: 2
+          example: ali
+      responses:
+        '200':
+          description: Matching patients, possibly an empty list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PatientSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Patients]
+      summary: Create a patient (FR2, FR3)
+      description: First name, last name and phone number are mandatory. Email, date of birth and medical alerts are optional and may be left blank.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientRequest'
+      responses:
+        '201':
+          description: Patient created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Patient'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /patients/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Patients]
+      summary: Get one patient profile (FR9)
+      description: Returns the patient's medical alerts and contact details. Use the two nested endpoints below for upcoming appointments and past reports.
+      responses:
+        '200':
+          description: The patient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Patient'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Patients]
+      summary: Edit a patient (FR5)
+      description: Send only the fields to change. Existing appointments and health reports stay linked to the patient.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePatientRequest'
+      responses:
+        '200':
+          description: Updated patient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Patient'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /patients/{id}/appointments:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Patients]
+      summary: List a patient's upcoming appointments (FR9)
+      description: Upcoming, non-cancelled appointments ordered by start time.
+      responses:
+        '200':
+          description: Upcoming appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /patients/{id}/health-reports:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Health Reports]
+      summary: List a patient's health reports (FR7a)
+      description: Saved reports with their dated notes, newest first.
+      responses:
+        '200':
+          description: The patient's reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Health Reports]
+      summary: Create a health report (FR6)
+      description: If appointmentId is given, that appointment must belong to the same patient, otherwise the request is rejected with 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHealthReportRequest'
+      responses:
+        '201':
+          description: Report saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /health-reports/{id}/notes:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Health Reports]
+      summary: Add a dated note to a saved report (FR7b)
+      description: Appends a follow-up observation or correction. The original report text is never changed, and notes cannot be edited or deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportNoteRequest'
+      responses:
+        '201':
+          description: Note added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportNote'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /appointments:
+    get:
+      tags: [Appointments]
+      summary: Weekly schedule (FR8)
+      description: Non-cancelled appointments between two moments, ordered by start time. Call it with the start and end of the week to fill the dashboard. Only one dentist exists, so the logged-in user decides whose schedule is returned.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: '2026-10-12T00:00:00Z'
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: '2026-10-19T00:00:00Z'
+      responses:
+        '200':
+          description: Appointments in the range
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Appointments]
+      summary: Book an appointment (FR11)
+      description: Rejected with 409, naming the clashing appointment, when the time overlaps any non-cancelled appointment. Back-to-back bookings are allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentRequest'
+      responses:
+        '201':
+          description: Appointment booked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /appointments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Appointments]
+      summary: Reschedule an appointment (FR13)
+      description: Change the start time (date and time) or the duration. Rejected with 409 when the new time overlaps another non-cancelled appointment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppointmentRequest'
+      responses:
+        '200':
+          description: Appointment moved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /appointments/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Appointments]
+      summary: Cancel an appointment (FR12)
+      description: Marks the appointment as cancelled and frees its time for new bookings. The row is kept and not deleted. Returns 409 if it is already cancelled, already completed, or already in the past.
+      responses:
+        '200':
+          description: Appointment cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Appointment is already cancelled, completed, or in the past
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Database id of the resource
+      schema:
+        type: integer
+        format: int64
+      example: 42
+
+  responses:
+    BadRequest:
+      description: Invalid input. The message names the invalid field (NFR3e).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    Unauthorized:
+      description: Missing, invalid or expired session token (NFR3d)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The requested record does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: The time overlaps another non-cancelled appointment
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConflictError'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        status:
+          type: integer
+        message:
+          type: string
+
+    ValidationError:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        field:
+          type: string
+          example: phoneNumber
+        message:
+          type: string
+          example: phoneNumber must not be blank
+
+    ConflictError:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 409
+        message:
+          type: string
+          example: This time overlaps another appointment
+        clashingAppointment:
+          $ref: '#/components/schemas/Appointment'
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: dentist@clinic.com
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT to send as a Bearer token
+        expiresAt:
+          type: string
+          format: date-time
+
+    PatientSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phoneNumber:
+          type: string
+
+    Patient:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phoneNumber:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        medicalAlerts:
+          type: string
+          nullable: true
+          description: Allergies, medications and conditions
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreatePatientRequest:
+      type: object
+      required: [firstName, lastName, phoneNumber]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phoneNumber:
+          type: string
+          minLength: 1
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        medicalAlerts:
+          type: string
+          nullable: true
+      example:
+        firstName: Ali
+        lastName: Rida
+        phoneNumber: '+96170123456'
+        medicalAlerts: Allergic to penicillin
+
+    UpdatePatientRequest:
+      type: object
+      description: Every field is optional. Send only what changes.
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phoneNumber:
+          type: string
+          minLength: 1
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        medicalAlerts:
+          type: string
+          nullable: true
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        patientId:
+          type: integer
+          format: int64
+        patientName:
+          type: string
+          description: Shown on the weekly schedule (FR8)
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          description: Derived as endTime minus startTime
+        status:
+          type: string
+          enum: [SCHEDULED, COMPLETED, CANCELLED]
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateAppointmentRequest:
+      type: object
+      required: [patientId, startTime, durationMinutes]
+      properties:
+        patientId:
+          type: integer
+          format: int64
+        startTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 1
+      example:
+        patientId: 42
+        startTime: '2026-10-14T10:00:00Z'
+        durationMinutes: 30
+
+    UpdateAppointmentRequest:
+      type: object
+      description: Send the start time, the duration, or both.
+      properties:
+        startTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 1
+
+    HealthReport:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        patientId:
+          type: integer
+          format: int64
+        appointmentId:
+          type: integer
+          format: int64
+          nullable: true
+        visitDate:
+          type: string
+          format: date
+        treatmentPerformed:
+          type: string
+        clinicalNotes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        notes:
+          type: array
+          description: Dated follow-up notes, oldest first
+          items:
+            $ref: '#/components/schemas/ReportNote'
+
+    CreateHealthReportRequest:
+      type: object
+      required: [visitDate, treatmentPerformed, clinicalNotes]
+      properties:
+        visitDate:
+          type: string
+          format: date
+        treatmentPerformed:
+          type: string
+          minLength: 1
+        clinicalNotes:
+          type: string
+          minLength: 1
+        appointmentId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional. Must be an appointment of the same patient.
+      example:
+        visitDate: '2026-10-14'
+        treatmentPerformed: Root canal, lower left molar
+        clinicalNotes: Patient tolerated the procedure well. Review in two weeks.
+
+    ReportNote:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        reportId:
+          type: integer
+          format: int64
+        noteText:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateReportNoteRequest:
+      type: object
+      required: [noteText]
+      properties:
+        noteText:
+          type: string
+          minLength: 1
+      example:
+        noteText: Patient called, mild sensitivity after the visit. Advised a follow-up check.

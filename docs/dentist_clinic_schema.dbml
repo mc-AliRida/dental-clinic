@@ -1,0 +1,121 @@
+// Database Schema for Single-Dentist Practice (revised)
+// Target: PostgreSQL. Paste into dbdiagram.io to render.
+
+Enum appointment_status {
+  SCHEDULED
+  CANCELLED
+}
+
+Table dentists {
+  id bigint [pk, increment]
+  email varchar(255) [not null, note: 'Login email (FR1). Store lowercased; uniqueness enforced on lower(email)']
+  password_hash varchar(255) [not null, note: 'bcrypt hash, cost >= 10 (NFR3b)']
+  first_name varchar(100) [not null]
+  last_name varchar(100) [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    `lower(email)` [unique, name: 'uq_dentists_email_lower']
+  }
+}
+
+Table patients {
+  id bigint [pk, increment]
+  first_name varchar(100) [not null, note: 'Mandatory (FR2)']
+  last_name varchar(100) [not null, note: 'Mandatory (FR2)']
+  phone_number varchar(30) [not null, note: 'Mandatory (FR2). Not unique: family members can share a number']
+  email varchar(255) [null, note: 'Optional (FR3). Needed for PDF delivery (FR10)']
+  date_of_birth date [null, note: 'Optional (FR3)']
+  medical_alerts text [null, note: 'Allergies, medications, conditions (FR3). Shown first on profile (FR9)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`, note: 'Set by the app on every update (e.g. @UpdateTimestamp); the default only applies on insert']
+
+  note: 'FR4 contains-search: see the pg_trgm indexes in the Postgres-only notes at the bottom of this file'
+}
+
+Table appointments {
+  id bigint [pk, increment]
+  patient_id bigint [not null, ref: > patients.id [delete: restrict]]
+  dentist_id bigint [not null, ref: > dentists.id [delete: restrict]]
+  start_time timestamptz [not null, note: 'Booking start (FR11, FR13)']
+  end_time timestamptz [not null, note: 'start + duration, computed by the service layer. Single source of truth: duration is derived as end_time - start_time']
+  status appointment_status [not null, default: 'SCHEDULED', note: 'FR12. Cancelled rows are kept but ignored by the overlap guard']
+  cancelled_at timestamptz [null, note: 'Set when status becomes CANCELLED (FR12)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`, note: 'Set by the app on every update']
+
+  indexes {
+    (dentist_id, start_time) [name: 'idx_appointments_week_view', note: 'Weekly schedule query (FR8)']
+    (patient_id, start_time) [name: 'idx_appointments_patient', note: 'Upcoming appointments on profile (FR9)']
+  }
+
+  checks {
+    `end_time > start_time` [name: 'ck_appointments_time_order']
+  }
+
+  note: 'Overlap guard (FR11, FR13) is enforced by an exclusion constraint, see the Postgres-only notes at the bottom of this file'
+}
+
+Table health_reports {
+  id bigint [pk, increment]
+  patient_id bigint [not null, ref: > patients.id [delete: restrict]]
+  dentist_id bigint [not null, ref: > dentists.id [delete: restrict]]
+  appointment_id bigint [null, ref: > appointments.id [delete: restrict], note: 'OPTIONAL: links the report to the visit it came from. Remove if not wanted']
+  visit_date date [not null, note: 'FR6. Primary sort key for newest-first (FR7a)']
+  treatment_performed varchar(255) [not null, note: 'FR6']
+  clinical_notes text [not null, note: 'FR6. Never updated after creation; corrections go in report_notes (FR7b)']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (patient_id, visit_date, created_at) [name: 'idx_reports_patient_newest', note: 'Query ORDER BY visit_date DESC, created_at DESC (FR7a)']
+  }
+}
+
+Table report_notes {
+  id bigint [pk, increment]
+  report_id bigint [not null, ref: > health_reports.id [delete: restrict]]
+  note_text text [not null, note: 'Follow-up observation / correction (FR7b)']
+  created_at timestamptz [not null, default: `now()`, note: 'Dated append-only note (FR7b)']
+
+  indexes {
+    (report_id, created_at) [name: 'idx_report_notes_report']
+  }
+}
+
+Table report_emails {
+  id bigint [pk, increment]
+  report_id bigint [not null, ref: > health_reports.id [delete: restrict]]
+  sent_to varchar(255) [not null, note: 'Patient email at the time of sending (FR10)']
+  status varchar(20) [not null, note: 'SENT / FAILED']
+  sent_at timestamptz [not null, default: `now()`]
+
+  note: 'OPTIONAL: delivery log for FR10. Remove if not wanted'
+}
+
+// ---------------------------------------------------------------------
+// Postgres-only DDL (DBML cannot express these; run as a migration)
+// ---------------------------------------------------------------------
+//
+// 1) Overlap guard for FR11 / FR13: the database itself rejects clashes.
+//
+//   CREATE EXTENSION IF NOT EXISTS btree_gist;
+//
+//   ALTER TABLE appointments
+//     ADD CONSTRAINT ex_appointments_no_overlap
+//     EXCLUDE USING gist (
+//       dentist_id WITH =,
+//       tstzrange(start_time, end_time) WITH &&
+//     ) WHERE (status <> 'CANCELLED');
+//
+//   tstzrange is half-open [start, end), so back-to-back bookings
+//   (10:00-10:30 then 10:30-11:00) are allowed.
+//   Catch the resulting violation in the service layer and look up the
+//   clashing appointment to name it in the error (FR11).
+//
+// 2) Contains-search for FR4 (optional at 5,000 patients, a seq scan is fast enough):
+//
+//   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+//   CREATE INDEX idx_patients_name_trgm
+//     ON patients USING gin ((first_name || ' ' || last_name) gin_trgm_ops);
+//   CREATE INDEX idx_patients_phone_trgm
+//     ON patients USING gin (phone_number gin_trgm_ops);
