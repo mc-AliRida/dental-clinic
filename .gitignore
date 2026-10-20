@@ -47,3 +47,12 @@ next-env.d.ts
 # AI assistant skill files (tool-generated)
 .claude/skills/
 .windsurf/skills/
+
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# generated Prisma client (rebuilt with `npx prisma generate`)
+/app/generated/prisma
