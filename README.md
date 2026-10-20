@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dental Clinic Appointment System
 
-## Getting Started
+Appointment and patient-record system for a single-dentist clinic (Dr Manal Nahleh).
+Primary goal: **save time** by moving appointments and patient records out of manual handling.
 
-First, run the development server:
+## Stack
+
+- Next.js (TypeScript)
+- Prisma 7 + PostgreSQL
+- Local dev on Ubuntu (WSL), PostgreSQL installed directly (no Docker)
+
+## Getting started
 
 ```bash
+git clone <repo-url>
+cd dental-clinic
+npm install
+cp .env.example .env        # then fill in your own values
+npx prisma generate         # Prisma 7 does not generate automatically
+npx prisma migrate dev      # create/update the database schema
+npx prisma db seed          # load fake data and run constraint checks
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+All variables are documented in `.env.example`. The real `.env` is never committed.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable       | Purpose                                  |
+| -------------- | ---------------------------------------- |
+| `DATABASE_URL` | PostgreSQL connection string             |
 
-## Learn More
+## Database
 
-To learn more about Next.js, take a look at the following resources:
+- Schema: `prisma/schema.prisma` (Dentist, Patient, Appointment, HealthReport, ReportNote)
+- Migrations: `prisma/migrations/`. The init migration also contains hand-written SQL that Prisma cannot express:
+  - exclusion constraint that blocks overlapping `SCHEDULED` appointments
+  - `CHECK` constraints for time order, cancel consistency and lowercase dentist emails
+- Seed: `prisma/seed.ts` creates fake data and verifies every constraint is enforced (rejected writes are expected).
+- **Never edit an applied migration.** Add a new one.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Branch naming
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`<type>/<short-kebab-description>`
 
-## Deploy on Vercel
+| Type        | Use for                          | Example                        |
+| ----------- | -------------------------------- | ------------------------------ |
+| `feature/`  | new functionality                | `feature/weekly-schedule`      |
+| `fix/`      | bug fixes                        | `fix/overlap-error-message`    |
+| `chore/`    | tooling, config, dependencies    | `chore/env-example`            |
+| `docs/`     | documentation only               | `docs/readme-conventions`      |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`main` is protected: no direct pushes, everything goes through a pull request.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Commit messages
+
+Short imperative subject, optionally prefixed with the type:
+
+```
+feature: add weekly schedule query
+fix: return 409 when appointment slot is taken
+```
+
+## Pull request rules
+
+1. One branch = one focused change. Keep PRs small enough to review in one sitting.
+2. Fill in the PR template (what, why, how it was tested).
+3. Link the board card the PR closes.
+4. The branch is up to date with `main` and builds locally.
+5. At least one review before merge (self-review of the diff counts when working solo).
+6. Squash-merge, then delete the branch.
+
+## Definition of done
+
+A card is done only when **all** of these are true:
+
+- [ ] Behaviour matches the requirement on the card (FR/NFR reference in the PR)
+- [ ] `npx tsc --noEmit` and the linter pass
+- [ ] Database changes are in a migration, and `npx prisma db seed` still reports "All checks passed"
+- [ ] The feature was exercised manually (happy path plus at least one failure case)
+- [ ] No secrets, tokens or real patient data in the diff
+- [ ] README or `.env.example` updated if setup changed
+- [ ] PR reviewed, merged into `main`, branch deleted
+
+## Secrets hygiene
+
+- `.env` and `.env.*` are git-ignored; only `.env.example` (placeholders, no real values) is committed.
+- Never paste a connection string or password into an issue, PR, chat or screenshot.
+- If a secret is ever committed, treat it as leaked: rotate it first, then clean the history.
+- Seed data is fake. Never load real patient data into a development database.
