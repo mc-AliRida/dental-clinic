@@ -56,3 +56,4 @@ next-env.d.ts
 
 # generated Prisma client (rebuilt with `npx prisma generate`)
 src/app/generated/prisma
+*.zip
