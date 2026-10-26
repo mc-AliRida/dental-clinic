@@ -29,16 +29,15 @@ model Dentist {
 }
 
 model Patient {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  first_name     String   @db.VarChar(100)
-  last_name      String   @db.VarChar(100)
-  phone_number   String   @db.VarChar(30)
-  email          String?  @db.VarChar(255)
-  date_of_birth  DateTime @db.Date
-  medical_alerts String   @default("") @db.Text
-  created_at     DateTime @default(now()) @db.Timestamptz
-  updated_at     DateTime @updatedAt @db.Timestamptz
-
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name     String         @db.VarChar(100)
+  last_name      String         @db.VarChar(100)
+  phone_number   String         @db.VarChar(30)
+  email          String?        @db.VarChar(255)
+  date_of_birth  DateTime       @db.Date
+  medical_alerts String         @default("") @db.Text
+  created_at     DateTime       @default(now()) @db.Timestamptz
+  updated_at     DateTime       @default(now()) @updatedAt @db.Timestamptz
   appointments   Appointment[]
   health_reports HealthReport[]
 
@@ -57,7 +56,7 @@ model Appointment {
   status      AppointmentStatus @default(SCHEDULED)
   canceled_at DateTime?         @db.Timestamptz
   created_at  DateTime          @default(now()) @db.Timestamptz
-  updated_at  DateTime          @updatedAt @db.Timestamptz
+  updated_at  DateTime          @default(now()) @updatedAt @db.Timestamptz
 
   patient        Patient        @relation(fields: [patient_id], references: [id], onDelete: Restrict)
   dentist        Dentist        @relation(fields: [dentist_id], references: [id], onDelete: Restrict)
@@ -85,6 +84,7 @@ model HealthReport {
   appointment  Appointment  @relation(fields: [appointment_id, patient_id], references: [id, patient_id], onDelete: Restrict)
   report_notes ReportNote[]
 
+  @@unique([appointment_id], map: "uq_reports_appointment")
   @@index([patient_id, visit_date, created_at], map: "idx_reports_patient_newest")
   @@map("health_reports")
 }

@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -8,7 +9,7 @@ url.searchParams.delete("sslmode"); // pg would otherwise override the ssl optio
 
 const adapter = new PrismaPg({
     connectionString: url.toString(),
-    ssl: { rejectUnauthorized: false }, // Railway proxy cert is self-signed
+    ssl: { rejectUnauthorized: false }, // DEV/SEED ONLY: Railway proxy cert is self-signed. Never copy this into the app.
 });
 const prisma = new PrismaClient({ adapter });
 
@@ -54,6 +55,9 @@ async function expectOk(name: string, fn: () => Promise<unknown>) {
 }
 
 async function main() {
+    if (process.env.NODE_ENV === "production") {
+        throw new Error("Refusing to seed: NODE_ENV is production");
+    }
     // ---------- 0. clean (child tables first because of ON DELETE RESTRICT) ----------
     await prisma.reportNote.deleteMany();
     await prisma.healthReport.deleteMany();
@@ -264,6 +268,13 @@ async function main() {
             },
         }));
 
+    await expectFail("second report for the same appointment", () =>
+        prisma.healthReport.create({
+            data: {
+                patient_id: rami.id, appointment_id: ramiPast.id, visit_date: at(-6, "00:00"),
+                treatment_performed: "x", clinical_notes: "x",
+            },
+        }));
     await expectFail("delete a patient who has appointments (Restrict)", () =>
         prisma.patient.delete({ where: { id: rami.id } }));
 
