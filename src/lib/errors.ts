@@ -29,3 +29,10 @@ export class UniqueViolationError extends Error {
     this.name = "UniqueViolationError";
   }
 }
+
+
+export class UnauthorizedError extends AppError {
+  constructor(message = "Authentication required") {
+    super(401, "UNAUTHORIZED", message);
+  }
+}
