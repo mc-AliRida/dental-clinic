@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { handleError } from "@/lib/http";
 import { withRequestLog } from "@/lib/request-log";
 import { patientService } from "@/modules/patients";
-import { patientIdSchema } from "@/modules/patients/patient.schema";
+import { patientIdSchema,updatePatientSchema  } from "@/modules/patients/patient.schema";
 import { toPatientDto } from "@/modules/patients/patient.mapper";
 
 
@@ -14,6 +14,20 @@ export const GET = withRequestLog(
       await requireAuth(request);
       const id = patientIdSchema.parse((await params).id);
       const patient = await patientService.getById(id);
+      return NextResponse.json(toPatientDto(patient));
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+);
+
+export const PATCH = withRequestLog(
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    try {
+      await requireAuth(request);
+      const id = patientIdSchema.parse((await params).id);
+      const input = updatePatientSchema.parse(await request.json());
+      const patient = await patientService.update(id, input);
       return NextResponse.json(toPatientDto(patient));
     } catch (error) {
       return handleError(error);

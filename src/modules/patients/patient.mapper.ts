@@ -5,7 +5,7 @@ interface PatientRecord {
   last_name: string;
   phone_number: string;
   email: string | null;
-  date_of_birth: Date;
+  date_of_birth: Date | null;
   medical_alerts: string;
   created_at: Date;
   updated_at: Date;
@@ -19,7 +19,7 @@ export function toPatientDto(p: PatientRecord) {
     lastName: p.last_name,
     phoneNumber: p.phone_number,
     email: p.email,
-    dateOfBirth: p.date_of_birth.toISOString().slice(0, 10), // "1990-05-01", not a timestamp
+    dateOfBirth: p.date_of_birth ? p.date_of_birth.toISOString().slice(0, 10) : null,
     medicalAlerts: p.medical_alerts,
     createdAt: p.created_at.toISOString(),
     updatedAt: p.updated_at.toISOString(),
