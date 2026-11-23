@@ -10,7 +10,7 @@ export class AuthService {
   async login(email: string, password: string) {
     const dentist = await this.repo.findByEmail(email);
     const matches = await bcrypt.compare(password, dentist?.password_hash ?? DUMMY_HASH);
-    if (!dentist || !matches) throw new UnauthorizedError("Invalid email or password");
+    if (!dentist || !matches) throw new UnauthorizedError("Wrong email or password");
     return { id: dentist.id };
   }
 }

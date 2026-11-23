@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireAuth } from "@/lib/auth";                     
+import { requireAuth } from "@/lib/auth";
 import { handleError } from "@/lib/http";
 import { withRequestLog } from "@/lib/request-log";
 import { patientService } from "@/modules/patients";
@@ -7,7 +7,7 @@ import { createPatientSchema, searchPatientsSchema } from "@/modules/patients/pa
 
 export const POST = withRequestLog(async (request: NextRequest) => {
   try {
-    await requireAuth();                                       
+    await requireAuth(request);
     const body = await request.json();
     const input = createPatientSchema.parse(body);
     const patient = await patientService.create(input);
@@ -19,7 +19,7 @@ export const POST = withRequestLog(async (request: NextRequest) => {
 
 export const GET = withRequestLog(async (request: NextRequest) => {
   try {
-    await requireAuth();                                      
+    await requireAuth(request);
     const params = searchPatientsSchema.parse(
       Object.fromEntries(request.nextUrl.searchParams),
     );
