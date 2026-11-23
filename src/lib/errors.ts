@@ -21,3 +21,11 @@ export class ConflictError extends AppError {
     super(409, "CONFLICT", message);
   }
 }
+
+/** Thrown by repositories when the database rejects a duplicate. */
+export class UniqueViolationError extends Error {
+  constructor() {
+    super("Unique constraint violated");
+    this.name = "UniqueViolationError";
+  }
+}

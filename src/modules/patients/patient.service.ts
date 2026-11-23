@@ -1,6 +1,8 @@
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { ConflictError, NotFoundError, UniqueViolationError } from "@/lib/errors";
 import type { PatientRepository } from "./patient.repository";
 import type { CreatePatientInput, SearchPatientsInput } from "./patient.schema";
+
+const DUPLICATE_MESSAGE = "A patient with the same name and date of birth already exists";
 
 // Service layer: business rules only. Depends on the repository interface,
 // never on Prisma or HTTP, so it can be unit-tested with a fake repository.
@@ -8,16 +10,22 @@ export class PatientService {
   constructor(private readonly repo: PatientRepository) {}
 
   async create(input: CreatePatientInput) {
-    // Rule: the same person (name + date of birth) must not be registered twice.
+    // Friendly fast path: gives the 409 in the normal case.
     const duplicate = await this.repo.findByIdentity(
       input.first_name,
       input.last_name,
       new Date(input.date_of_birth),
     );
-    if (duplicate) {
-      throw new ConflictError("A patient with the same name and date of birth already exists");
+    if (duplicate) throw new ConflictError(DUPLICATE_MESSAGE);
+
+    // The database unique index is the real guard. Two simultaneous requests can both
+    // pass the check above; the second insert is rejected here and mapped to the same 409.
+    try {
+      return await this.repo.create(input);
+    } catch (error) {
+      if (error instanceof UniqueViolationError) throw new ConflictError(DUPLICATE_MESSAGE);
+      throw error;
     }
-    return this.repo.create(input);
   }
 
   async getById(id: string) {

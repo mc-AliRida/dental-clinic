@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-const name = z.string().trim().min(1, "Required").max(100);
+const name = z
+  .string()
+  .trim()
+  .min(1, "Required")
+  .max(100)
+  .transform((s) => s.replace(/\s+/g, " "));
 
 export const createPatientSchema = z.object({
   first_name: name,

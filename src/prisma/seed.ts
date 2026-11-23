@@ -5,11 +5,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../app/generated/prisma/client";
 
 const url = new URL(process.env.DATABASE_URL!);
+const isLocal = ["localhost", "127.0.0.1"].includes(url.hostname);
 url.searchParams.delete("sslmode"); // pg would otherwise override the ssl option below
 
 const adapter = new PrismaPg({
     connectionString: url.toString(),
-    ssl: { rejectUnauthorized: false }, // DEV/SEED ONLY: Railway proxy cert is self-signed. Never copy this into the app.
+    ...(isLocal ? {} : { ssl: { rejectUnauthorized: false } }), // DEV/SEED ONLY: Railway cert is self-signed. Never copy into the app.
 });
 const prisma = new PrismaClient({ adapter });
 
@@ -283,6 +284,29 @@ async function main() {
 
     await expectFail("delete a report that has notes (Restrict)", () =>
         prisma.healthReport.delete({ where: { id: report1.id } }));
+
+    await expectFail("duplicate patient identity, different letter case", () =>
+        prisma.patient.create({
+            data: {
+                first_name: "RAMI", last_name: "haddad", phone_number: "+961 70 999 999",
+                date_of_birth: new Date("1985-03-14"),
+            },
+        }));
+
+    const twin = () =>
+        prisma.patient.create({
+            data: {
+                first_name: "Race", last_name: "Test", phone_number: "+961 70 000 001",
+                date_of_birth: new Date("2000-01-01"),
+            },
+        });
+    const settled = await Promise.allSettled([twin(), twin()]);
+    const created = settled.filter((r) => r.status === "fulfilled").length;
+    if (created === 1) console.log("  ✓ concurrent duplicate inserts: exactly one accepted");
+    else { failures++; console.log(`  ✗ concurrent duplicate inserts: ${created} accepted, expected 1`); }
+
+
+
 
     console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
     process.exitCode = failures === 0 ? 0 : 1;

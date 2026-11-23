@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { UniqueViolationError } from "@/lib/errors";
 import type { CreatePatientInput, SearchPatientsInput } from "./patient.schema";
+
+// Repository layer: the ONLY place that talks to Prisma for patients.
+// No business rules, no HTTP, no validation. Just queries.
 
 type Patient = Awaited<ReturnType<typeof prisma.patient.findFirstOrThrow>>;
 
@@ -10,18 +14,28 @@ export interface PatientRepository {
   search(params: SearchPatientsInput): Promise<{ items: Patient[]; total: number }>;
 }
 
+/** Prisma reports a unique-index violation as P2002. */
+function isUniqueViolation(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
 export const patientRepository: PatientRepository = {
-  create(data) {
-    return prisma.patient.create({
-      data: {
-        first_name: data.first_name,
-        last_name: data.last_name,
-        phone_number: data.phone_number,
-        email: data.email ?? null,
-        date_of_birth: new Date(data.date_of_birth),
-        medical_alerts: data.medical_alerts,
-      },
-    });
+  async create(data) {
+    try {
+      return await prisma.patient.create({
+        data: {
+          first_name: data.first_name,
+          last_name: data.last_name,
+          phone_number: data.phone_number,
+          email: data.email ?? null,
+          date_of_birth: new Date(data.date_of_birth),
+          medical_alerts: data.medical_alerts,
+        },
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new UniqueViolationError();
+      throw error;
+    }
   },
 
   findById(id) {
