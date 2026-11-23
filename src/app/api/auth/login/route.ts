@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { AppError, UnauthorizedError } from "@/lib/errors";
 import { handleError } from "@/lib/http";
 import { withRequestLog } from "@/lib/request-log";
-import { setSessionCookie, signSession } from "@/lib/auth";
+import {  signSession } from "@/lib/auth";
 import { clearLoginFailures, loginAllowed, recordLoginFailure } from "@/lib/rate-limit";
 import { authService } from "@/modules/auth";
 import { loginSchema } from "@/modules/auth/auth.schema";
@@ -17,8 +17,7 @@ export const POST = withRequestLog(async (request: NextRequest) => {
     try {
       const dentist = await authService.login(email, password);
       clearLoginFailures(key);
-      await setSessionCookie(await signSession(dentist.id));
-      return NextResponse.json({ id: dentist.id });
+      return NextResponse.json(await signSession(dentist.id));   // { token, expiresAt }
     } catch (error) {
       if (error instanceof UnauthorizedError) recordLoginFailure(key);
       throw error;

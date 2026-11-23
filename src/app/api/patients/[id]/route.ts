@@ -1,19 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { requireAuth } from "@/lib/auth";
 import { handleError } from "@/lib/http";
 import { withRequestLog } from "@/lib/request-log";
 import { patientService } from "@/modules/patients";
-import { patientIdSchema } from "@/modules/patients/patient.schema";
-import { requireAuth } from "@/lib/auth"; 
+import { patientIdSchema,updatePatientSchema  } from "@/modules/patients/patient.schema";
+import { toPatientDto } from "@/modules/patients/patient.mapper";
+
 
 /** GET /api/patients/:id: fetch one patient */
 export const GET = withRequestLog(
-  async (_request: NextRequest, { params }: { params: Promise<{ id: string }> },) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     try {
-
-      await requireAuth();
+      await requireAuth(request);
       const id = patientIdSchema.parse((await params).id);
       const patient = await patientService.getById(id);
-      return NextResponse.json(patient);
+      return NextResponse.json(toPatientDto(patient));
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+);
+
+export const PATCH = withRequestLog(
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    try {
+      await requireAuth(request);
+      const id = patientIdSchema.parse((await params).id);
+      const input = updatePatientSchema.parse(await request.json());
+      const patient = await patientService.update(id, input);
+      return NextResponse.json(toPatientDto(patient));
     } catch (error) {
       return handleError(error);
     }

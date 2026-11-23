@@ -34,7 +34,7 @@ model Patient {
   last_name      String         @db.VarChar(100)
   phone_number   String         @db.VarChar(30)
   email          String?        @db.VarChar(255)
-  date_of_birth  DateTime       @db.Date
+  date_of_birth  DateTime?       @db.Date
   medical_alerts String         @default("") @db.Text
   created_at     DateTime       @default(now()) @db.Timestamptz
   updated_at     DateTime       @default(now()) @updatedAt @db.Timestamptz

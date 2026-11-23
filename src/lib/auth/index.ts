@@ -1,8 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+
 import { UnauthorizedError } from "@/lib/errors";
 
-export const SESSION_COOKIE = "session";
+
 const MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
 
 function secretKey() {
@@ -14,37 +14,28 @@ function secretKey() {
 }
 
 export async function signSession(dentistId: string) {
-    return new SignJWT({})
+    const expiresAt = new Date(Date.now() + MAX_AGE_SECONDS * 1000);
+    const token = await new SignJWT({})
         .setProtectedHeader({ alg: "HS256" })
         .setSubject(dentistId)
         .setIssuedAt()
-        .setExpirationTime(`${MAX_AGE_SECONDS}s`)
+        .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
         .sign(secretKey());
+    return { token, expiresAt: expiresAt.toISOString() };
 }
 
-export async function setSessionCookie(token: string) {
-    (await cookies()).set(SESSION_COOKIE, token, {
-        httpOnly: true,
-        sameSite: "strict",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        maxAge: MAX_AGE_SECONDS,
-    });
-}
 
-export async function clearSessionCookie() {
-    (await cookies()).delete(SESSION_COOKIE);
-}
 
-export async function requireAuth(): Promise<{ dentistId: string }> {
+
+export async function requireAuth(request:Request): Promise<{ dentistId: string }> {
     const key = secretKey();
-    const token = (await cookies()).get(SESSION_COOKIE)?.value;
-    if (!token) throw new UnauthorizedError();
-    try {
-        const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"] });
-        if (!payload.sub) throw new UnauthorizedError();
-        return { dentistId: payload.sub };
-    } catch {
-        throw new UnauthorizedError();
-    }
+    const match = /^Bearer (.+)$/.exec(request.headers.get("authorization") ?? "");
+  if (!match) throw new UnauthorizedError("Missing or invalid token");
+  try {
+    const { payload } = await jwtVerify(match[1], key, { algorithms: ["HS256"] });
+    if (!payload.sub) throw new UnauthorizedError("Missing or invalid token");
+    return { dentistId: payload.sub };
+  } catch {
+    throw new UnauthorizedError("Missing or invalid token");
+  }
 }
