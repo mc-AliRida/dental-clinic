@@ -1,0 +1,31 @@
+/** Errors the service layer throws. The route layer maps them to HTTP responses. */
+export class AppError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AppError";
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(resource: string) {
+    super(404, "NOT_FOUND", `${resource} not found`);
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message: string) {
+    super(409, "CONFLICT", message);
+  }
+}
+
+/** Thrown by repositories when the database rejects a duplicate. */
+export class UniqueViolationError extends Error {
+  constructor() {
+    super("Unique constraint violated");
+    this.name = "UniqueViolationError";
+  }
+}
