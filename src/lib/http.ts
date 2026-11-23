@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { AppError } from "@/lib/errors";
@@ -32,7 +33,7 @@ export function handleError(error: unknown) {
     );
   }
 
-  console.error(error); // never leak internals to the client
+  logger.error({ err: error }, "unhandled error"); // logged here, never sent to the client
   return NextResponse.json(
     { error: "INTERNAL_ERROR", message: "Something went wrong" },
     { status: 500 },
